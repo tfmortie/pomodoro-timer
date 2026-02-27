@@ -1,0 +1,28 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.about {
+  text-align: center;
+  padding: 1.5rem;
+}
+
+.about h1 {
+  font-size: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.about p {
+  color: #cbd5f5;
+  font-size: 0.95rem;
+}
