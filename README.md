@@ -1,13 +1,16 @@
 # Pomodoro Timer (Electron + React)
 
-Lightweight Pomodoro timer designed to live entirely in the macOS menu bar. Built with Electron, React, Vite, and TypeScript so the UI layer stays portable and ready for future Windows/Linux builds.
+Menu-bar-first Pomodoro timer for macOS, built with Electron + React + Vite. The current iteration provides the tray shell (icon, menu, about window) so future contributors can focus on adding timer logic, notifications, and cross-platform packaging.
 
 ## Current Capabilities
 
-- Renders a tray icon in the macOS menu bar
-- Tray menu exposes two actions: `About` (shows a small window with "Pomodoro Timer app") and `Quit Pomodoro Timer`
-- Modular repository layout with separate folders for the Electron main process, preload bridge, and React renderer
-- Electron Builder configuration in place for producing macOS `.dmg` installers (other OS targets can be added later)
+- macOS tray icon (template tomato outline)
+- Menu actions:
+  - **About** – shows a small window with “Pomodoro Timer app / Stay focused with lightweight menu bar controls.”
+  - **Quit Pomodoro Timer** – exits the app
+- Renderer UI is React/Vite (currently just the About view)
+- Modular layout (`app/main`, `app/preload`, `app/renderer`, `assets/`) ready for Pomodoro logic
+- `electron-builder` setup emitting unsigned `.dmg` installers (signing/notarization pending)
 
 ## Tech Stack
 
@@ -19,8 +22,8 @@ Lightweight Pomodoro timer designed to live entirely in the macOS menu bar. Buil
 ## Prerequisites
 
 - macOS 13+
-- Node.js 22.x (see `.nvmrc` for the exact version)
-- npm 11+ (ships with Node 22) or pnpm/yarn if you prefer
+- Node.js **22.22.0** (pinned in `.nvmrc`)
+- npm 10+/11+ (bundled with Node 22)
 
 ## Getting Started
 
@@ -47,6 +50,12 @@ npm run build
 
 Artifacts land in `release/` (configurable via `build/electron-builder.yml`). Signing/notarization is not set up yet; add `CSC_IDENTITY_AUTO_DISCOVERY=true` and Apple credentials when you’re ready to distribute.
 
+Folder highlights:
+- `dist/main` → compiled Electron main process output
+- `dist/preload` → compiled preload bridge
+- `dist/renderer` → Vite renderer bundle consumed by Electron
+- `release/` → unsigned `.app` + `.dmg` outputs
+
 ## Project Structure
 
 ```
@@ -60,20 +69,28 @@ build/
   electron-builder.yml
 .nvmrc        # Node version pin (22.22.0)
 .npmrc        # engine-strict to ensure Node compatibility
+.editorconfig / .eslintrc.cjs / .prettierrc  # lint & format baseline
 
 ## Troubleshooting
 
 - `npm use` is not a valid command. Use `nvm use` (Node Version Manager) or install Node 22 manually (e.g., `brew install node@22` and export `PATH="/usr/local/opt/node@22/bin:$PATH"`).
-- `npm install` errors complaining about `EBADENGINE` mean you’re running an older Node (v16) or npm (v8). Upgrade to Node 22.x (with npm 10+/11+) before installing dependencies.
+- `npm install` `EBADENGINE` errors indicate you’re on Node 16/npm 8. Switch to Node 22.22.0 and reinstall.
+- Only seeing the Vite page? Run `npm run dev` from the repo root so Electron starts alongside Vite.
+- Tray icon still missing? Ensure `dist/main/main.js` and `dist/preload/index.js` exist; if not, run `npm run build:main && npm run build:preload` once.
+- Seeing only the Vite preview page? Make sure you ran `npm run dev` from the repo root so Electron (tray icon) starts alongside Vite.
+- Tray still missing? Verify `dist/main/main.js` and `dist/preload/index.js` exist; if not, run `npm run build:main && npm run build:preload` once.
 ```
 
 ## Roadmap Snapshot
 
 - [x] Menu-bar icon with About & Quit actions
-- [ ] Core Pomodoro timer logic running in the main process
-- [ ] UI controls for session start/stop + break durations
-- [ ] Notifications for session transitions
-- [ ] Cross-platform builds (Windows/Linux targets in electron-builder)
+- [x] About window rendered in React/Vite
+- [ ] Core Pomodoro timer logic running in the main process with IPC updates
+- [ ] UI controls for session start/stop + configurable durations
+- [ ] Menu-bar status indicator / countdown
+- [ ] Native notifications for focus/break transitions
 - [ ] Persisted preferences/settings window
+- [ ] Windows + Linux targets in `electron-builder`
+- [ ] macOS signing + notarization automation
 
 Use this README as a living snapshot when adding features; update sections above as the app evolves.
