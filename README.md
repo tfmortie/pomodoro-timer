@@ -1,16 +1,14 @@
 # Pomodoro Timer (Electron + React)
 
-Menu-bar-first Pomodoro timer for macOS, built with Electron + React + Vite. The current iteration provides the tray shell (icon, menu, about window) so future contributors can focus on adding timer logic, notifications, and cross-platform packaging.
+Fixed-window Pomodoro timer for macOS, built with Electron + React + Vite. The current iteration ships the full 25-minute countdown experience (window UI, timer logic, alert, notification) so future contributors can iterate on customization, persistence, and cross-platform packaging.
 
 ## Current Capabilities
 
-- macOS tray icon (template tomato outline)
-- Menu actions:
-  - **About** – shows a small window with “Pomodoro Timer app / Stay focused with lightweight menu bar controls.”
-  - **Quit Pomodoro Timer** – exits the app
-- Renderer UI is React/Vite (currently just the About view)
-- Modular layout (`app/main`, `app/preload`, `app/renderer`, `assets/`) ready for Pomodoro logic
-- `electron-builder` setup emitting unsigned `.dmg` installers (signing/notarization pending)
+- **Docked window UI**: launches as a fixed-size macOS desktop window (shows in the Dock and can be minimized like a regular app).
+- **Timer controls**: 25:00 default countdown with play/pause toggle and automatic reset when the session finishes.
+- **Session feedback**: audible chime plus native notification ("Time's up! Take a break.") on completion.
+- **Renderer**: React/Vite timer UI that mirrors the provided mock (red hero background, large digits, centered button).
+- **Packaging**: `electron-builder` setup emitting unsigned `.app` + `.dmg` artifacts (signing/notarization still manual).
 
 ## Tech Stack
 
@@ -27,30 +25,43 @@ Menu-bar-first Pomodoro timer for macOS, built with Electron + React + Vite. The
 
 ## Getting Started
 
-```bash
-git clone <repo-url>
-cd pomodoro-timer
-nvm install 22.22.0   # first-time setup
-nvm use                # loads version from .nvmrc (or export PATH to node@22)
-npm install            # root dependencies (Electron main & tooling)
-cd app/renderer && npm install && cd ../..  # renderer dependencies
-npm run dev
-```
+1. Clone and install Node 22.22.0 via `nvm install` (or install manually and match `.nvmrc`).
+2. Install all dependencies (root + renderer) with a single command:
 
-`npm run dev` launches Vite (renderer) and the Electron main process concurrently. A tray icon appears in the macOS menu bar; click it to access **About** and **Quit Pomodoro Timer**.
+   ```bash
+   npm install
+   ```
+
+   This uses npm workspaces to manage both the Electron main process and the React renderer.
+
+3. Run the desktop app in dev mode:
+
+   ```bash
+   npm run dev
+   ```
+
+`npm run dev` starts the main/preload TypeScript watchers, the Vite dev server, and Electron once the compiled files exist. A docked Pomodoro window opens automatically when everything is ready.
+
+### Using the timer
+
+1. Click `START` to begin the 25-minute focus block.
+2. The button toggles to `PAUSE`; click it again to pause/resume.
+3. When the timer reaches `00:00`, the window resets to `25:00`, plays a short chime, and macOS shows a notification ("Time's up! Take a break.").
+4. Start again whenever you’re ready.
 
 ## Building a macOS DMG
 
-```bash
-nvm use
-npm install
-cd app/renderer && npm install && cd ../..
-npm run build
-```
+1. Ensure dependencies are installed (see steps above).
+2. From the repo root run:
 
-Artifacts land in `release/` (configurable via `build/electron-builder.yml`). Signing/notarization is not set up yet; add `CSC_IDENTITY_AUTO_DISCOVERY=true` and Apple credentials when you’re ready to distribute.
+   ```bash
+   npm run build
+   ```
+
+This runs the renderer build, compiles the Electron main + preload bundles, and calls `electron-builder`. Artifacts land in `release/` (configurable via `build/electron-builder.yml`). Signing/notarization is not set up yet; add `CSC_IDENTITY_AUTO_DISCOVERY=true` and Apple credentials when you’re ready to distribute.
 
 Folder highlights:
+
 - `dist/main` → compiled Electron main process output
 - `dist/preload` → compiled preload bridge
 - `dist/renderer` → Vite renderer bundle consumed by Electron
@@ -60,11 +71,11 @@ Folder highlights:
 
 ```
 app/
-  main/       # Electron entry + tray wiring
-  preload/    # IPC bridge (minimal today, expandable later)
-  renderer/   # React/Vite UI for About window + future controls
+  main/       # Electron window creation + notification wiring
+  preload/    # IPC bridge exposing timerComplete()
+  renderer/   # React/Vite UI for the Pomodoro timer
 assets/
-  icons/      # Tray icons per platform (macOS template icon provided)
+  icons/      # App/dock/tray icons for packaging
 build/
   electron-builder.yml
 .nvmrc        # Node version pin (22.22.0)
@@ -75,20 +86,18 @@ build/
 
 - `npm use` is not a valid command. Use `nvm use` (Node Version Manager) or install Node 22 manually (e.g., `brew install node@22` and export `PATH="/usr/local/opt/node@22/bin:$PATH"`).
 - `npm install` `EBADENGINE` errors indicate you’re on Node 16/npm 8. Switch to Node 22.22.0 and reinstall.
-- Only seeing the Vite page? Run `npm run dev` from the repo root so Electron starts alongside Vite.
-- Tray icon still missing? Ensure `dist/main/main.js` and `dist/preload/index.js` exist; if not, run `npm run build:main && npm run build:preload` once.
-- Seeing only the Vite preview page? Make sure you ran `npm run dev` from the repo root so Electron (tray icon) starts alongside Vite.
-- Tray still missing? Verify `dist/main/main.js` and `dist/preload/index.js` exist; if not, run `npm run build:main && npm run build:preload` once.
+- Blank renderer window in dev? Ensure `dist/main/main.js` and `dist/preload/index.js` exist (`npm run build:main && npm run build:preload`), then restart `npm run dev`.
+- Seeing Vite’s preview page instead of the Electron window? Run `npm run dev` from the repo root so Electron launches alongside Vite.
+- Notifications not showing? macOS may block the first notification—open System Settings → Notifications → Pomodoro Timer and allow alerts.
 ```
 
 ## Roadmap Snapshot
 
-- [x] Menu-bar icon with About & Quit actions
-- [x] About window rendered in React/Vite
-- [ ] Core Pomodoro timer logic running in the main process with IPC updates
-- [ ] UI controls for session start/stop + configurable durations
+- [x] Docked window with timer UI/logic
+- [x] Native notification + audible alert on completion
+- [ ] Configurable focus + break durations
 - [ ] Menu-bar status indicator / countdown
-- [ ] Native notifications for focus/break transitions
+- [ ] Native notifications for focus/break transitions (break cycles)
 - [ ] Persisted preferences/settings window
 - [ ] Windows + Linux targets in `electron-builder`
 - [ ] macOS signing + notarization automation

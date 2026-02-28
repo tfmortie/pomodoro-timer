@@ -1,26 +1,20 @@
 import path from 'node:path';
-import { app, BrowserWindow, Menu, Tray, nativeImage } from 'electron';
+import { app, BrowserWindow, Notification, ipcMain } from 'electron';
 
-let tray: Tray | null = null;
-let aboutWindow: BrowserWindow | null = null;
+let mainWindow: BrowserWindow | null = null;
 
 const isProd = process.env.NODE_ENV === 'production';
 
-const createAboutWindow = () => {
-  if (aboutWindow) {
-    aboutWindow.show();
-    return aboutWindow;
-  }
-
-  aboutWindow = new BrowserWindow({
+const createWindow = () => {
+  mainWindow = new BrowserWindow({
     width: 320,
-    height: 160,
+    height: 400,
     resizable: false,
     maximizable: false,
-    minimizable: false,
-    show: false,
+    minimizable: true,
+    show: true,
     frame: true,
-    title: 'About Pomodoro Timer',
+    title: 'Pomodoro Timer',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -29,58 +23,41 @@ const createAboutWindow = () => {
   });
 
   if (isProd) {
-    aboutWindow.loadFile(path.join(__dirname, '../../dist/renderer/index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../../dist/renderer/index.html'));
   } else {
-    aboutWindow.loadURL('http://localhost:5173');
-    aboutWindow.webContents.openDevTools({ mode: 'detach' });
+    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
 
-  aboutWindow.on('ready-to-show', () => aboutWindow?.show());
-  aboutWindow.on('closed', () => {
-    aboutWindow = null;
+  mainWindow.on('closed', () => {
+    mainWindow = null;
   });
-
-  return aboutWindow;
 };
 
-const createTray = () => {
-  const iconPath = path.join(__dirname, '../../assets/icons/trayTemplate.png');
-  const image = nativeImage.createFromPath(iconPath);
-  image.setTemplateImage(true);
-  tray = new Tray(image);
-  tray.setToolTip('Pomodoro Timer');
+// Show app in dock
+if (process.platform === 'darwin') {
+  app.dock.show();
+}
 
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'About',
-      click: () => {
-        createAboutWindow();
-      },
-    },
-    { type: 'separator' },
-    {
-      label: 'Quit Pomodoro Timer',
-      role: 'quit',
-    },
-  ]);
-
-  tray.setContextMenu(contextMenu);
-};
-
-const createApp = () => {
-  if (process.platform === 'darwin') {
-    app.dock.hide();
-  }
-
-  createTray();
-};
-
-app.whenReady().then(createApp);
+app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
-  /* keep app running in tray */
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
 });
 
-app.on('before-quit', () => {
-  tray?.destroy();
+app.on('activate', () => {
+  if (mainWindow === null) {
+    createWindow();
+  }
+});
+
+// Handle timer completion from renderer
+ipcMain.on('timer-complete', () => {
+  // Show notification
+  new Notification({
+    title: 'Pomodoro Timer',
+    body: "Time's up! Take a break.",
+  }).show();
 });
