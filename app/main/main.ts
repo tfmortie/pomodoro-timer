@@ -7,8 +7,9 @@ const isProd = process.env.NODE_ENV === 'production';
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
-    width: 320,
-    height: 400,
+    width: 450,
+    height: 550,
+    vibrancy: 'fullscreen-ui',
     resizable: false,
     maximizable: false,
     minimizable: true,
