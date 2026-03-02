@@ -1,46 +1,63 @@
-body {
+body,
+html,
+#root {
+  width: 100vw;
+  height: 100vh;
   margin: 0;
   padding: 0;
+  background: transparent;
+  overflow: hidden;
   box-sizing: border-box;
   font-family: 'Roboto', Arial, Helvetica, sans-serif;
 }
 
 .main-bg {
-  width: 450px;
-  height: 520px;
-  background: #bc6868;
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0px;
+  background: rgba(188, 104, 104, 0.85);
+  /* For glass corners: if you ever want a card, set border-radius > 0, but with a transparent window it will show desktop/black outside for custom frames. */
+  backdrop-filter: blur(18px);
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.center-content {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2.5rem;
-  padding: 0;
-  border-radius: 30px;
-  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.16);
+  width: 100%;
 }
 
 .timer-big {
   color: #fff;
-  font-size: 5rem;
-  font-weight: 500;
+  font-size: clamp(4rem, 12vw, 12rem);
+  font-weight: 800;
   text-align: center;
-  font-family: 'Roboto', Arial, Helvetica, sans-serif;
   letter-spacing: 0.07em;
   margin-bottom: 2rem;
-  max-width: 95vw;
-  max-height: 30vh;
   text-shadow: 0 3px 16px rgba(0, 0, 0, 0.15);
+  max-width: 95vw;
+  max-height: 35vh;
   overflow: hidden;
+  font-family: 'Roboto', Arial, Helvetica, sans-serif;
 }
 
 .action-btn {
-  width: 120px;
-  height: 50px;
+  width: clamp(100px, 40vw, 320px);
+  height: clamp(32px, 12vw, 100px);
   background: #fff;
   color: #bc6868;
   border-radius: 18px;
   border: 4px solid #ffd600;
-  font-size: 1rem;
+  font-size: clamp(1rem, 5vw, 2.5rem);
   font-weight: bold;
   text-transform: uppercase;
   letter-spacing: 0.11em;
@@ -53,16 +70,6 @@ body {
   transition:
     box-shadow 0.2s,
     border-color 0.2s;
-}
-
-.timer-big {
-  color: white;
-  font-size: 10rem;
-  font-weight: bold;
-  text-align: center;
-  font-family: 'Roboto', Arial, Helvetica, sans-serif;
-  margin-bottom: 4rem;
-  letter-spacing: 0.04em;
 }
 
 .action-btn:active {

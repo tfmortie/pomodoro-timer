@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import './App.css';
+import './CustomTitleBar.css';
+import CustomTitleBar from './CustomTitleBar';
 
 const DEFAULT_TIME = 25 * 60;
 
@@ -44,10 +46,13 @@ function App() {
 
   return (
     <div className="main-bg">
-      <div className="timer-big">{formatTime(timeLeft)}</div>
-      <button className="action-btn" onClick={() => setIsRunning(!isRunning)}>
-        {isRunning ? 'PAUSE' : 'START'}
-      </button>
+      <CustomTitleBar />
+      <div className="center-content">
+        <div className="timer-big">{formatTime(timeLeft)}</div>
+        <button className="action-btn" onClick={() => setIsRunning(!isRunning)}>
+          {isRunning ? 'PAUSE' : 'START'}
+        </button>
+      </div>
     </div>
   );
 }

@@ -91,6 +91,37 @@ build/
 - Notifications not showing? macOS may block the first notification—open System Settings → Notifications → Pomodoro Timer and allow alerts.
 ```
 
+## Implementation Notes (Current State)
+
+### Window & UI
+
+- The application uses a **frameless Electron window** (`frame: false`, `transparent: true`) for custom top bar and modern glass effect.
+- **Resizable**: The window is resizable (`resizable: true` in BrowserWindow options), and all UI scales fluidly.
+- **main-bg**: The main content area is a single root container (class `.main-bg`) that fills the entire window (`width: 100vw; height: 100vh;`) and ensures no space or content falls outside it. The border-radius is currently set to `0px` to avoid issues with black/transparent corners caused by window shape rendering; restorations or tweaks are possible.
+- **Glass effect**: The background uses CSS `backdrop-filter: blur(18px);` and a semi-transparent fill. You can change color, alpha, and blur via `.main-bg` in App.css.
+
+### Scaling Behavior
+
+- Content (timer, button, top bar) uses `clamp()` and `vw/vh` units for responsive font sizes, widths, and layout, supporting smooth scaling.
+- Flexbox is used to align and scale elements within the main-bg, ensuring they stay centered/positioned as the window resizes.
+
+### Top Bar / Controls
+
+- The top bar (custom title bar) is rendered as part of `.main-bg`, not outside; it mimics native macOS, Windows, or Linux controls using SVG for cross-platform consistency.
+- Control buttons are wired to Electron's window APIs via IPC (see preload and main process handling for `window-control` channel).
+
+### Implementation Tradeoffs
+
+- No drop shadow is applied to the main window.
+- true glassy corners (card-like) are not visually practical with transparent custom Electron windows; using `border-radius: 0` guarantees that all edges are perfectly flush (no black corners). If you want to try bringing back rounded corners, you can simply update the border-radius in CSS, accepting the tradeoff.
+- The app is designed to be cross-platform modern and maintainable. Resizing, glass/blur, and scaling work on Mac, Windows, and Linux with minor platform style shifts (titlebar, controls).
+
+### How to continue
+
+- To change color, glass/blur strength, or border-radius: edit `.main-bg` in `app/renderer/src/App.css`.
+- To adjust scaling, refine clamp/vw/vh units in the timer/button/titlebar styles in CSS.
+- To add more features (preferences, menu, durations), follow the roadmap below.
+
 ## Roadmap Snapshot
 
 - [x] Docked window with timer UI/logic
