@@ -15,9 +15,54 @@ function App() {
   );
   const [timeLeft, setTimeLeft] = useState(TAB_CONFIG[selectedTab].duration);
   const [isRunning, setIsRunning] = useState(false);
+  const [taskInput, setTaskInput] = useState('');
+  const [activeTask, setActiveTask] = useState('');
+  const [showLogModal, setShowLogModal] = useState(false);
+  const [logRows, setLogRows] = useState<Array<Record<string, string>>>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeLeftRef = useRef(timeLeft);
+  const prevTabRef = useRef<null | keyof typeof TAB_CONFIG>(null);
+  const sessionRef = useRef<null | {
+    startMs: number;
+    mode: keyof typeof TAB_CONFIG;
+    task: string;
+  }>(null);
 
   useEffect(() => {
+    timeLeftRef.current = timeLeft;
+  }, [timeLeft]);
+
+  const getElapsedSeconds = (mode: keyof typeof TAB_CONFIG) =>
+    Math.max(0, TAB_CONFIG[mode].duration - timeLeftRef.current);
+
+  const logSession = (options: { completed: boolean; interrupted: boolean; endReason: string }) => {
+    const session = sessionRef.current;
+    const mode = session?.mode ?? selectedTab;
+    const elapsedSeconds = getElapsedSeconds(mode);
+    if (!session && elapsedSeconds <= 0) return;
+    const startMs = session?.startMs ?? Date.now() - elapsedSeconds * 1000;
+    const task = (session?.task ?? activeTask) || taskInput.trim();
+    const payload = {
+      startedAt: new Date(startMs).toISOString(),
+      endedAt: new Date().toISOString(),
+      task,
+      mode,
+      elapsedSeconds,
+      completed: options.completed,
+      interrupted: options.interrupted,
+      endReason: options.endReason,
+    };
+    if (window.pomodoro?.ipcRenderer) {
+      window.pomodoro.ipcRenderer.send('log-session', payload);
+    }
+    sessionRef.current = null;
+  };
+
+  useEffect(() => {
+    if (prevTabRef.current && prevTabRef.current !== selectedTab) {
+      logSession({ completed: false, interrupted: true, endReason: 'tab-change' });
+    }
+    prevTabRef.current = selectedTab;
     setTimeLeft(TAB_CONFIG[selectedTab].duration);
     setIsRunning(false);
     if (timerRef.current) {
@@ -42,6 +87,10 @@ function App() {
             clearInterval(timerRef.current!);
             timerRef.current = null;
             setIsRunning(false);
+            if (window.pomodoro?.timerComplete) {
+              window.pomodoro.timerComplete();
+            }
+            logSession({ completed: true, interrupted: false, endReason: 'completed' });
             return TAB_CONFIG[selectedTab].duration;
           }
         });
@@ -59,16 +108,115 @@ function App() {
     };
   }, [isRunning, selectedTab]);
 
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (sessionRef.current) {
+        logSession({ completed: false, interrupted: true, endReason: 'app-exit' });
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
+  const handleRegisterTask = () => {
+    const trimmed = taskInput.trim();
+    if (!trimmed) return;
+    setActiveTask(trimmed);
+  };
+
+  const fetchLogs = async () => {
+    if (!window.pomodoro?.readLogs) return;
+    const csvText = await window.pomodoro.readLogs();
+    if (!csvText) {
+      setLogRows([]);
+      return;
+    }
+    const lines = csvText.trim().split(/\r?\n/);
+    if (lines.length <= 1) {
+      setLogRows([]);
+      return;
+    }
+    const headers = lines[0]
+      .replace(/^\uFEFF/, '')
+      .split(',')
+      .map((header) => header.trim());
+    const parseCsvLine = (line: string) => {
+      const fields: string[] = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i += 1) {
+        const char = line[i];
+        if (char === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i += 1;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          fields.push(current);
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      fields.push(current);
+      return fields;
+    };
+    const rows = lines
+      .slice(1)
+      .filter((line) => line.trim().length > 0)
+      .map((line: string) => {
+        const cols = parseCsvLine(line);
+        const row: Record<string, string> = {};
+        headers.forEach((header: string, index: number) => {
+          const raw = cols[index] || '';
+          row[header] = raw.trim();
+        });
+        return row;
+      })
+      .filter((row: Record<string, string>) => row.timestamp_end);
+    rows.sort((a: Record<string, string>, b: Record<string, string>) =>
+      a.timestamp_end < b.timestamp_end ? 1 : -1,
+    );
+    setLogRows(rows);
+  };
+
+  useEffect(() => {
+    if (showLogModal) {
+      fetchLogs();
+    }
+  }, [showLogModal]);
+
+  const handleStartPause = () => {
+    if (isRunning) {
+      logSession({ completed: false, interrupted: true, endReason: 'paused' });
+      setIsRunning(false);
+      return;
+    }
+    const task = activeTask || taskInput.trim();
+    sessionRef.current = {
+      startMs: Date.now(),
+      mode: selectedTab,
+      task,
+    };
+    setIsRunning(true);
+  };
+
   return (
     <div className="main-bg" style={{ background: TAB_CONFIG[selectedTab].color }}>
       <CustomTitleBar />
       <div className="tab-bar">
-        {['pomodoro', 'short break', 'long break'].map((tab) => {
+        {(Object.keys(TAB_CONFIG) as Array<keyof typeof TAB_CONFIG>).map((tab) => {
           // Helper: Current main background color
           const mainBg = TAB_CONFIG[selectedTab].color;
           // Parse hex color to rgba for 50% opacity
-          const hexToRgba = (hex) => {
-            const [r, g, b] = hex.match(/\w\w/g).map((x) => parseInt(x, 16));
+          const hexToRgba = (hex: string) => {
+            const matches = hex.match(/\w\w/g);
+            if (!matches || matches.length < 3) {
+              return 'rgba(0, 0, 0, 0.35)';
+            }
+            const [r, g, b] = matches.map((x: string) => parseInt(x, 16));
             return `rgba(${r}, ${g}, ${b}, 0.5)`;
           };
           const inactiveBg = hexToRgba(mainBg.replace('#', ''));
@@ -89,14 +237,91 @@ function App() {
             </button>
           );
         })}
-
       </div>
       <div className="center-content">
         <div className="timer-big">{formatTime(timeLeft)}</div>
-        <button className="action-btn" onClick={() => setIsRunning(!isRunning)}>
+        <div className="task-row">
+          <label className="task-label" htmlFor="task-input">
+            Task
+          </label>
+          <div className="task-input-wrap">
+            <input
+              id="task-input"
+              className="task-input"
+              type="text"
+              value={taskInput}
+              onChange={(event) => setTaskInput(event.target.value)}
+              placeholder="Enter task"
+            />
+            <button className="task-add-btn" type="button" onClick={handleRegisterTask}>
+              +
+            </button>
+            <button
+              className="task-log-btn"
+              type="button"
+              onClick={() => setShowLogModal(true)}
+              aria-label="View logs"
+            >
+              📈
+            </button>
+          </div>
+        </div>
+        <button className="action-btn" onClick={handleStartPause}>
           {isRunning ? 'PAUSE' : 'START'}
         </button>
+        {activeTask ? <div className="active-task">{activeTask}</div> : null}
       </div>
+      {showLogModal ? (
+        <div className="log-modal" role="dialog" aria-modal="true">
+          <div className="log-overlay" onClick={() => setShowLogModal(false)} />
+          <div className="log-panel">
+            <div className="log-header">
+              <div className="log-title">Task Log</div>
+              <button className="log-close" onClick={() => setShowLogModal(false)}>
+                ×
+              </button>
+            </div>
+            <div className="log-table-wrap">
+              <table className="log-table">
+                <thead>
+                  <tr>
+                    <th>Start</th>
+                    <th>End</th>
+                    <th>Task</th>
+                    <th>Mode</th>
+                    <th>Elapsed (s)</th>
+                    <th>Completed</th>
+                    <th>Interrupted</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="log-empty">
+                        No logs yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    logRows.map((row, index) => (
+                      <tr key={`${row.timestamp_end}-${index}`}>
+                        <td>{row.timestamp_start}</td>
+                        <td>{row.timestamp_end}</td>
+                        <td>{row.task}</td>
+                        <td>{row.mode}</td>
+                        <td>{row.elapsed_seconds}</td>
+                        <td>{row.completed}</td>
+                        <td>{row.interrupted}</td>
+                        <td>{row.end_reason}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

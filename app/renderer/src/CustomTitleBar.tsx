@@ -1,11 +1,11 @@
-import React from 'react';
-
 declare global {
   interface Window {
     pomodoro?: {
       ipcRenderer?: {
         send: (channel: string, ...args: any[]) => void;
       };
+      readLogs?: () => Promise<string>;
+      timerComplete?: () => void;
     };
   }
 }
@@ -88,3 +88,5 @@ export default function CustomTitleBar() {
     </div>
   );
 }
+
+export {};

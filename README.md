@@ -6,8 +6,12 @@ Fixed-window Pomodoro timer for macOS, built with Electron + React + Vite. The c
 
 - **Docked window UI**: launches as a fixed-size macOS desktop window (shows in the Dock and can be minimized like a regular app).
 - **Timer controls**: 25:00 default countdown with play/pause toggle and automatic reset when the session finishes.
-- **Session feedback**: audible chime plus native notification ("Time's up! Take a break.") on completion.
+- **Session feedback**: native alert window (shown even when minimized) plus notification on completion.
 - **Renderer**: React/Vite timer UI that mirrors the provided mock (red hero background, large digits, centered button).
+- **Task input + register**: task name field with a "+" register button and active task label.
+- **Session logging**: CSV log file with task, mode, elapsed time, and interruption reason.
+- **Log viewer**: in-app 📈 button opens a modal table of recent sessions (newest first).
+- **Branding**: minimal rounded red tomato icon for app/dock.
 - **Packaging**: `electron-builder` setup emitting unsigned `.app` + `.dmg` artifacts (signing/notarization still manual).
 
 ## Tech Stack
@@ -46,8 +50,24 @@ Fixed-window Pomodoro timer for macOS, built with Electron + React + Vite. The c
 
 1. Click `START` to begin the 25-minute focus block.
 2. The button toggles to `PAUSE`; click it again to pause/resume.
-3. When the timer reaches `00:00`, the window resets to `25:00`, plays a short chime, and macOS shows a notification ("Time's up! Take a break.").
-4. Start again whenever you’re ready.
+3. Enter a task name, click `+` to register it, and the label appears below the button.
+4. Use the 📈 button to view the log table in a modal.
+5. When the timer reaches `00:00`, the window resets to `25:00`, and a native alert appears (even if minimized), plus a notification.
+6. Start again whenever you’re ready.
+
+## Logging
+
+Sessions are logged to a CSV file for plotting and analysis. A log entry is written whenever the timer stops or resets: pause, tab change, completion, or app exit.
+
+**Log path (cross-platform):**
+
+- macOS: `~/Library/Application Support/Pomodoro Timer/logs/pomodoro-log.csv`
+- Windows: `%APPDATA%\Pomodoro Timer\logs\pomodoro-log.csv`
+- Linux: `~/.config/Pomodoro Timer/logs/pomodoro-log.csv`
+
+**CSV columns:**
+
+`timestamp_start,timestamp_end,task,mode,elapsed_seconds,completed,interrupted,end_reason`
 
 ## Building a macOS DMG
 
@@ -59,6 +79,24 @@ Fixed-window Pomodoro timer for macOS, built with Electron + React + Vite. The c
    ```
 
 This runs the renderer build, compiles the Electron main + preload bundles, and calls `electron-builder`. Artifacts land in `release/` (configurable via `build/electron-builder.yml`). Signing/notarization is not set up yet; add `CSC_IDENTITY_AUTO_DISCOVERY=true` and Apple credentials when you’re ready to distribute.
+
+## Installation (macOS)
+
+1. Open the generated DMG from `release/`.
+2. Drag `Pomodoro Timer.app` into the Applications folder.
+3. Launch from Applications. If macOS warns about an unsigned app, use System Settings → Privacy & Security → Open Anyway.
+
+## Installation (Windows)
+
+1. Build or obtain a Windows installer (`.exe` or `.msi`) from your build pipeline.
+2. Run the installer and follow the prompts.
+3. If Windows SmartScreen warns about an unsigned app, choose “More info” → “Run anyway”.
+
+## Installation (Linux)
+
+1. Build or obtain a Linux package (`.AppImage`, `.deb`, or `.rpm`).
+2. For AppImage: mark as executable (`chmod +x Pomodoro-Timer.AppImage`) and run it.
+3. For `.deb`/`.rpm`: install using your package manager (`sudo dpkg -i` or `sudo rpm -i`).
 
 Folder highlights:
 

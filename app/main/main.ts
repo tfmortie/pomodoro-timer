@@ -1,8 +1,30 @@
 import path from 'node:path';
-import { app, BrowserWindow, Notification, ipcMain } from 'electron';
+import { app, BrowserWindow, Notification, ipcMain, dialog } from 'electron';
+import fs from 'node:fs';
 let mainWindow: BrowserWindow | null = null;
 const isProd = app.isPackaged;
 const devServerUrl = process.env.VITE_DEV_SERVER_URL || process.env.ELECTRON_RENDERER_URL;
+
+const desiredUserData = path.join(app.getPath('appData'), 'Pomodoro Timer');
+const legacyUserData = app.getPath('userData');
+if (legacyUserData !== desiredUserData) {
+  try {
+    const legacyLogs = path.join(legacyUserData, 'logs', 'pomodoro-log.csv');
+    const targetLogsDir = path.join(desiredUserData, 'logs');
+    const targetLogs = path.join(targetLogsDir, 'pomodoro-log.csv');
+    fs.mkdirSync(targetLogsDir, { recursive: true });
+    if (fs.existsSync(legacyLogs) && !fs.existsSync(targetLogs)) {
+      try {
+        fs.renameSync(legacyLogs, targetLogs);
+      } catch {
+        fs.copyFileSync(legacyLogs, targetLogs);
+      }
+    }
+  } catch {
+    // Ignore migration errors; logging will still function in the new path.
+  }
+  app.setPath('userData', desiredUserData);
+}
 const createWindow = () => {
   const launchStart = Date.now();
   mainWindow = new BrowserWindow({
@@ -73,10 +95,58 @@ app.on('activate', () => {
   }
 });
 ipcMain.on('timer-complete', () => {
+  if (mainWindow) {
+    mainWindow.show();
+    mainWindow.focus();
+  }
+  dialog.showMessageBox({
+    type: 'info',
+    title: 'Pomodoro Timer',
+    message: "Time's up!",
+    detail: 'Your session has finished.',
+  });
   new Notification({
     title: 'Pomodoro Timer',
     body: "Time's up! Take a break.",
   }).show();
+});
+
+const ensureLogsDir = () => {
+  const logsDir = path.join(app.getPath('userData'), 'logs');
+  fs.mkdirSync(logsDir, { recursive: true });
+  return logsDir;
+};
+
+const appendLog = (entry: {
+  startedAt: string;
+  endedAt: string;
+  task: string;
+  mode: string;
+  elapsedSeconds: number;
+  completed: boolean;
+  interrupted: boolean;
+  endReason: string;
+}) => {
+  const logsDir = ensureLogsDir();
+  const logPath = path.join(logsDir, 'pomodoro-log.csv');
+  const hasFile = fs.existsSync(logPath);
+  const header =
+    'timestamp_start,timestamp_end,task,mode,elapsed_seconds,completed,interrupted,end_reason\n';
+  const safeTask = (entry.task || '').replace(/"/g, '""');
+  const line = `${entry.startedAt},${entry.endedAt},"${safeTask}",${entry.mode},${entry.elapsedSeconds},${entry.completed},${entry.interrupted},${entry.endReason}\n`;
+  fs.appendFileSync(logPath, (hasFile ? '' : header) + line, 'utf8');
+};
+
+ipcMain.on('log-session', (_event, entry) => {
+  if (!entry) return;
+  appendLog(entry);
+});
+
+ipcMain.handle('read-logs', () => {
+  const logsDir = ensureLogsDir();
+  const logPath = path.join(logsDir, 'pomodoro-log.csv');
+  if (!fs.existsSync(logPath)) return '';
+  return fs.readFileSync(logPath, 'utf8');
 });
 
 // Listen for window-control events from renderer
