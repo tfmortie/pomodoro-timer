@@ -4,8 +4,8 @@ let mainWindow: BrowserWindow | null = null;
 const isProd = process.env.NODE_ENV === 'production';
 const createWindow = () => {
   mainWindow = new BrowserWindow({
-    width: 450,
-    height: 550,
+    width: 380,
+    height: 480,
     resizable: true,
     maximizable: false,
     minimizable: true,
