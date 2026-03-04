@@ -1,7 +1,7 @@
 {
   "name": "pomodoro-timer",
   "version": "1.0.0",
-  "description": "Menu bar Pomodoro timer desktop app built with Electron, React, Vite, and TypeScript.",
+  "description": "Pomodoro timer desktop app built with Electron, React, Vite, and TypeScript.",
   "main": "dist/main/main.js",
   "workspaces": [
     "app/renderer"
@@ -20,7 +20,7 @@
     "typecheck": "tsc -p tsconfig.base.json --noEmit"
   },
   "keywords": [],
-  "author": "",
+  "author": "Thomas Mortier",
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.10.1",
