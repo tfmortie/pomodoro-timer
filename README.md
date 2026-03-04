@@ -1,10 +1,10 @@
 # Pomodoro Timer
 
-<div style="text-align: center;">
-  <img src="assets/PomodoroTimer.png" style="width: 50%;">
-</div>
-
 Big goals are built in small, focused moments. Pomodoro Timer helps you cut through distractions and turn your to-do list into real progress. 
+
+<h1 align="center">
+    <img src="assets/PomodoroTimer.png" style="width: 50%;">
+</h1>
 
 Pomodoro Timer is heavily inspired by [Pomofocus](https://pomofocus.io/app), and is built with Electron + React + Vite. 
 
