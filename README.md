@@ -1,10 +1,16 @@
-# Pomodoro Timer (Electron + React)
+# Pomodoro Timer
 
-Fixed-window Pomodoro timer for macOS, built with Electron + React + Vite. The current iteration ships the full 25-minute countdown experience (window UI, timer logic, alert, notification) so future contributors can iterate on customization, persistence, and cross-platform packaging.
+<div style="text-align: center;">
+  <img src="assets/PomodoroTimer.png" style="width: 50%;">
+</div>
+
+Big goals are built in small, focused moments. Pomodoro Timer helps you cut through distractions and turn your to-do list into real progress. 
+
+Pomodoro Timer is heavily inspired by [Pomofocus](https://pomofocus.io/app), and is built with Electron + React + Vite. 
 
 ## Current Capabilities
 
-- **Docked window UI**: launches as a fixed-size macOS desktop window (shows in the Dock and can be minimized like a regular app).
+- **Docked window UI**: launches as a fixed-size desktop window (shows in the Dock and can be minimized like a regular app).
 - **Timer controls**: 25:00 default countdown with play/pause toggle and automatic reset when the session finishes.
 - **Session feedback**: native alert window (shown even when minimized) plus notification on completion.
 - **Renderer**: React/Vite timer UI that mirrors the provided mock (red hero background, large digits, centered button).
@@ -23,7 +29,6 @@ Fixed-window Pomodoro timer for macOS, built with Electron + React + Vite. The c
 
 ## Prerequisites
 
-- macOS 13+
 - Node.js **22.22.0** (pinned in `.nvmrc`)
 - npm 10+/11+ (bundled with Node 22)
 
