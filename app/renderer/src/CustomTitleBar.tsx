@@ -17,9 +17,7 @@ function getPlatform(): 'darwin' | 'win32' | 'linux' | 'browser' {
 }
 
 function sendWindowEvent(event: 'close' | 'minimize' | 'maximize' | 'restore') {
-  if (window.pomodoro && window.pomodoro.ipcRenderer) {
-    window.pomodoro.ipcRenderer.send('window-control', event);
-  }
+  window.pomodoro?.windowControl(event);
 }
 
 function macControls() {

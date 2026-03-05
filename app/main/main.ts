@@ -95,6 +95,10 @@ app.on('activate', () => {
   }
 });
 
+app.on('before-quit', () => {
+  writeSessionLog(false);
+});
+
 const showTimerCompletionUi = () => {
   if (mainWindow) {
     mainWindow.show();
@@ -117,15 +121,23 @@ type TimerMode = 'pomodoro' | 'short break' | 'long break';
 const timerState: {
   intervalHandle: ReturnType<typeof setInterval> | null;
   timeLeft: number;
-  mode: TimerMode;
+  sessionMode: TimerMode;
+  currentMode: TimerMode;
   startEpoch: number;
   durationAtStart: number;
+  sessionTask: string;
+  sessionStartedAt: string;
+  sessionFullDuration: number;
 } = {
   intervalHandle: null,
   timeLeft: 0,
-  mode: 'pomodoro',
+  sessionMode: 'pomodoro',
+  currentMode: 'pomodoro',
   startEpoch: 0,
   durationAtStart: 0,
+  sessionTask: '',
+  sessionStartedAt: '',
+  sessionFullDuration: 0,
 };
 
 const emitTimerTick = () => {
@@ -140,10 +152,26 @@ const stopTimer = () => {
   }
 };
 
+const writeSessionLog = (completed: boolean) => {
+  if (!timerState.sessionStartedAt) return;
+  const elapsedSeconds = Math.max(0, timerState.sessionFullDuration - timerState.timeLeft);
+  appendLog({
+    startedAt: timerState.sessionStartedAt,
+    endedAt: new Date().toISOString(),
+    task: timerState.sessionTask,
+    mode: timerState.sessionMode,
+    completed,
+    elapsedSeconds,
+  });
+  timerState.sessionStartedAt = '';
+  timerState.sessionTask = '';
+};
+
 const handleTimerComplete = () => {
   stopTimer();
   timerState.timeLeft = 0;
   emitTimerTick();
+  writeSessionLog(true);
   showTimerCompletionUi();
 };
 
@@ -151,6 +179,7 @@ const startInterval = () => {
   stopTimer();
   timerState.startEpoch = Date.now();
   timerState.durationAtStart = timerState.timeLeft;
+  emitTimerTick();
   timerState.intervalHandle = setInterval(() => {
     const elapsed = Math.floor((Date.now() - timerState.startEpoch) / 1000);
     timerState.timeLeft = Math.max(0, timerState.durationAtStart - elapsed);
@@ -161,17 +190,32 @@ const startInterval = () => {
   }, 1000);
 };
 
-ipcMain.on('timer-start', (_event, payload: { durationSeconds: number; mode: TimerMode }) => {
-  const duration = Math.max(0, Math.floor(payload?.durationSeconds ?? 0));
-  timerState.timeLeft = duration;
-  timerState.mode = payload?.mode ?? 'pomodoro';
-  emitTimerTick();
-  if (duration === 0) {
-    handleTimerComplete();
-    return;
-  }
-  startInterval();
-});
+ipcMain.on(
+  'timer-start',
+  (
+    _event,
+    payload: {
+      durationSeconds: number;
+      mode: TimerMode;
+      task: string;
+      startedAt: string;
+    },
+  ) => {
+    const duration = Math.max(0, Math.floor(payload?.durationSeconds ?? 0));
+    timerState.timeLeft = duration;
+    timerState.sessionMode = payload?.mode ?? 'pomodoro';
+    timerState.currentMode = payload?.mode ?? 'pomodoro';
+    timerState.sessionTask = payload?.task ?? '';
+    timerState.sessionStartedAt = payload?.startedAt ?? new Date().toISOString();
+    timerState.sessionFullDuration = duration;
+    emitTimerTick();
+    if (duration === 0) {
+      handleTimerComplete();
+      return;
+    }
+    startInterval();
+  },
+);
 
 ipcMain.on('timer-pause', () => {
   if (!timerState.intervalHandle) return;
@@ -189,9 +233,11 @@ ipcMain.on('timer-resume', () => {
 });
 
 ipcMain.on('timer-reset', (_event, payload: { durationSeconds: number; mode: TimerMode }) => {
+  writeSessionLog(false);
   stopTimer();
   timerState.timeLeft = Math.max(0, Math.floor(payload?.durationSeconds ?? 0));
-  timerState.mode = payload?.mode ?? 'pomodoro';
+  timerState.sessionMode = payload?.mode ?? 'pomodoro';
+  timerState.currentMode = payload?.mode ?? 'pomodoro';
   emitTimerTick();
 });
 
@@ -208,25 +254,17 @@ const appendLog = (entry: {
   endedAt: string;
   task: string;
   mode: string;
-  elapsedSeconds: number;
   completed: boolean;
-  interrupted: boolean;
-  endReason: string;
+  elapsedSeconds: number;
 }) => {
   const logsDir = ensureLogsDir();
   const logPath = path.join(logsDir, 'pomodoro-log.csv');
   const hasFile = fs.existsSync(logPath);
-  const header =
-    'timestamp_start,timestamp_end,task,mode,elapsed_seconds,completed,interrupted,end_reason\n';
+  const header = 'timestamp_start,timestamp_end,task,mode,completed,elapsed_seconds\n';
   const safeTask = (entry.task || '').replace(/"/g, '""');
-  const line = `${entry.startedAt},${entry.endedAt},"${safeTask}",${entry.mode},${entry.elapsedSeconds},${entry.completed},${entry.interrupted},${entry.endReason}\n`;
+  const line = `${entry.startedAt},${entry.endedAt},"${safeTask}",${entry.mode},${entry.completed},${entry.elapsedSeconds}\n`;
   fs.appendFileSync(logPath, (hasFile ? '' : header) + line, 'utf8');
 };
-
-ipcMain.on('log-session', (_event, entry) => {
-  if (!entry) return;
-  appendLog(entry);
-});
 
 ipcMain.handle('read-logs', () => {
   const logsDir = ensureLogsDir();

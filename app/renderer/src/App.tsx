@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { PomodoroAPI } from '../../preload/types';
 import './App.css';
 import './CustomTitleBar.css';
@@ -8,12 +8,6 @@ const TAB_CONFIG = {
   pomodoro: { label: 'Pomodoro', duration: 25 * 60, color: '#ad4f4f' },
   'short break': { label: 'Short Break', duration: 5 * 60, color: '#4f86ad' },
   'long break': { label: 'Long Break', duration: 15 * 60, color: '#4fad6a' },
-};
-
-type SessionInfo = {
-  startMs: number;
-  mode: keyof typeof TAB_CONFIG;
-  task: string;
 };
 
 function App() {
@@ -27,63 +21,12 @@ function App() {
   const [showLogModal, setShowLogModal] = useState(false);
   const [logRows, setLogRows] = useState<Array<Record<string, string>>>([]);
   const timeLeftRef = useRef(timeLeft);
-  const prevTabRef = useRef<null | keyof typeof TAB_CONFIG>(null);
-  const sessionRef = useRef<SessionInfo | null>(null);
-  const sessionLoggedRef = useRef(false);
-  const activeTaskRef = useRef('');
-  const taskInputRef = useRef('');
-  const selectedTabRef = useRef<'pomodoro' | 'short break' | 'long break'>(selectedTab);
-
-  activeTaskRef.current = activeTask;
-  taskInputRef.current = taskInput;
-  selectedTabRef.current = selectedTab;
 
   useEffect(() => {
     timeLeftRef.current = timeLeft;
   }, [timeLeft]);
 
-  const getElapsedSeconds = useCallback(
-    (mode: keyof typeof TAB_CONFIG) => Math.max(0, TAB_CONFIG[mode].duration - timeLeftRef.current),
-    [],
-  );
-
-  const logSession = useCallback(
-    (
-      options: { completed: boolean; interrupted: boolean; endReason: string },
-      sessionOverride?: SessionInfo | null,
-    ) => {
-      if (sessionLoggedRef.current) return;
-      const session = sessionOverride ?? sessionRef.current;
-      const mode = session?.mode ?? selectedTabRef.current;
-      const elapsedSeconds = getElapsedSeconds(mode);
-      if (!session && elapsedSeconds <= 0) return;
-      const startMs = session?.startMs ?? Date.now() - elapsedSeconds * 1000;
-      const baseTask = (session?.task ?? activeTaskRef.current) || taskInputRef.current.trim();
-      const payload = {
-        startedAt: new Date(startMs).toISOString(),
-        endedAt: new Date().toISOString(),
-        task: baseTask,
-        mode,
-        elapsedSeconds,
-        completed: options.completed,
-        interrupted: options.interrupted,
-        endReason: options.endReason,
-      };
-      if (window.pomodoro?.ipcRenderer) {
-        window.pomodoro.ipcRenderer.send('log-session', payload);
-      }
-      sessionRef.current = null;
-      sessionLoggedRef.current = true;
-    },
-    [getElapsedSeconds],
-  );
-
   useEffect(() => {
-    if (prevTabRef.current && prevTabRef.current !== selectedTab) {
-      const sessionSnapshot = sessionRef.current;
-      logSession({ completed: false, interrupted: true, endReason: 'tab-change' }, sessionSnapshot);
-    }
-    prevTabRef.current = selectedTab;
     const nextDuration = TAB_CONFIG[selectedTab].duration;
     setTimeLeft(nextDuration);
     timeLeftRef.current = nextDuration;
@@ -92,7 +35,7 @@ function App() {
       durationSeconds: nextDuration,
       mode: selectedTab,
     });
-  }, [logSession, selectedTab]);
+  }, [selectedTab]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -106,14 +49,13 @@ function App() {
       setTimeLeft(value);
       if (value === 0 && isRunning) {
         setIsRunning(false);
-        logSession({ completed: true, interrupted: false, endReason: 'completed' });
       }
     };
     (window as Window & { pomodoro?: PomodoroAPI }).pomodoro?.onTimerTick(handleTick);
     return () => {
       (window as Window & { pomodoro?: PomodoroAPI }).pomodoro?.removeTimerTick();
     };
-  }, [isRunning, logSession]);
+  }, [isRunning]);
 
   useEffect(() => {
     const syncFromMain = async () => {
@@ -146,16 +88,6 @@ function App() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
-
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (sessionRef.current) {
-        logSession({ completed: false, interrupted: true, endReason: 'app-exit' });
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [logSession]);
 
   const handleRegisterTask = () => {
     const trimmed = taskInput.trim();
@@ -230,19 +162,17 @@ function App() {
   const handleStartPause = () => {
     const pomodoroApi = window.pomodoro as PomodoroAPI | undefined;
     if (isRunning) {
-      logSession({ completed: false, interrupted: true, endReason: 'paused' });
       pomodoroApi?.timerPause();
       setIsRunning(false);
       return;
     }
     const task = activeTask || taskInput.trim();
-    sessionLoggedRef.current = false;
-    sessionRef.current = {
-      startMs: Date.now(),
+    pomodoroApi?.timerStart({
+      durationSeconds: timeLeftRef.current,
       mode: selectedTab,
       task,
-    };
-    pomodoroApi?.timerStart({ durationSeconds: timeLeftRef.current, mode: selectedTab });
+      startedAt: new Date().toISOString(),
+    });
     setIsRunning(true);
   };
 
@@ -332,16 +262,14 @@ function App() {
                     <th>End</th>
                     <th>Task</th>
                     <th>Mode</th>
-                    <th>Elapsed (s)</th>
                     <th>Completed</th>
-                    <th>Interrupted</th>
-                    <th>Reason</th>
+                    <th>Elapsed (s)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {logRows.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="log-empty">
+                      <td colSpan={6} className="log-empty">
                         No logs yet.
                       </td>
                     </tr>
@@ -352,10 +280,8 @@ function App() {
                         <td>{row.timestamp_end}</td>
                         <td>{row.task}</td>
                         <td>{row.mode}</td>
-                        <td>{row.elapsed_seconds}</td>
                         <td>{row.completed}</td>
-                        <td>{row.interrupted}</td>
-                        <td>{row.end_reason}</td>
+                        <td>{row.elapsed_seconds}</td>
                       </tr>
                     ))
                   )}
