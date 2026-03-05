@@ -94,7 +94,8 @@ app.on('activate', () => {
     createWindow();
   }
 });
-ipcMain.on('timer-complete', () => {
+
+const showTimerCompletionUi = () => {
   if (mainWindow) {
     mainWindow.show();
     mainWindow.focus();
@@ -109,7 +110,92 @@ ipcMain.on('timer-complete', () => {
     title: 'Pomodoro Timer',
     body: "Time's up! Take a break.",
   }).show();
+};
+
+type TimerMode = 'pomodoro' | 'short break' | 'long break';
+
+const timerState: {
+  intervalHandle: ReturnType<typeof setInterval> | null;
+  timeLeft: number;
+  mode: TimerMode;
+  startEpoch: number;
+  durationAtStart: number;
+} = {
+  intervalHandle: null,
+  timeLeft: 0,
+  mode: 'pomodoro',
+  startEpoch: 0,
+  durationAtStart: 0,
+};
+
+const emitTimerTick = () => {
+  if (!mainWindow) return;
+  mainWindow.webContents.send('timer-tick', timerState.timeLeft);
+};
+
+const stopTimer = () => {
+  if (timerState.intervalHandle) {
+    clearInterval(timerState.intervalHandle);
+    timerState.intervalHandle = null;
+  }
+};
+
+const handleTimerComplete = () => {
+  stopTimer();
+  timerState.timeLeft = 0;
+  emitTimerTick();
+  showTimerCompletionUi();
+};
+
+const startInterval = () => {
+  stopTimer();
+  timerState.startEpoch = Date.now();
+  timerState.durationAtStart = timerState.timeLeft;
+  timerState.intervalHandle = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - timerState.startEpoch) / 1000);
+    timerState.timeLeft = Math.max(0, timerState.durationAtStart - elapsed);
+    emitTimerTick();
+    if (timerState.timeLeft <= 0) {
+      handleTimerComplete();
+    }
+  }, 1000);
+};
+
+ipcMain.on('timer-start', (_event, payload: { durationSeconds: number; mode: TimerMode }) => {
+  const duration = Math.max(0, Math.floor(payload?.durationSeconds ?? 0));
+  timerState.timeLeft = duration;
+  timerState.mode = payload?.mode ?? 'pomodoro';
+  emitTimerTick();
+  if (duration === 0) {
+    handleTimerComplete();
+    return;
+  }
+  startInterval();
 });
+
+ipcMain.on('timer-pause', () => {
+  if (!timerState.intervalHandle) return;
+  const elapsed = Math.floor((Date.now() - timerState.startEpoch) / 1000);
+  timerState.timeLeft = Math.max(0, timerState.durationAtStart - elapsed);
+  stopTimer();
+  emitTimerTick();
+});
+
+ipcMain.on('timer-resume', () => {
+  if (timerState.intervalHandle || timerState.timeLeft <= 0) return;
+  timerState.durationAtStart = timerState.timeLeft;
+  timerState.startEpoch = Date.now();
+  startInterval();
+});
+
+ipcMain.on('timer-reset', (_event, payload: { durationSeconds: number; mode: TimerMode }) => {
+  stopTimer();
+  timerState.timeLeft = Math.max(0, Math.floor(payload?.durationSeconds ?? 0));
+  timerState.mode = payload?.mode ?? 'pomodoro';
+  emitTimerTick();
+});
+
+ipcMain.handle('timer-get-state', () => timerState.timeLeft);
 
 const ensureLogsDir = () => {
   const logsDir = path.join(app.getPath('userData'), 'logs');
@@ -150,8 +236,7 @@ ipcMain.handle('read-logs', () => {
 });
 
 // Listen for window-control events from renderer
-import { ipcMain as mainIpc } from 'electron';
-mainIpc.on('window-control', (event, action) => {
+ipcMain.on('window-control', (_event, action) => {
   if (!mainWindow) return;
   switch (action) {
     case 'minimize':

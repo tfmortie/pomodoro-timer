@@ -1,12 +1,8 @@
+import type { PomodoroAPI } from '../../preload/types';
+
 declare global {
   interface Window {
-    pomodoro?: {
-      ipcRenderer?: {
-        send: (channel: string, ...args: any[]) => void;
-      };
-      readLogs?: () => Promise<string>;
-      timerComplete?: () => void;
-    };
+    pomodoro?: PomodoroAPI;
   }
 }
 

@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import type { PomodoroAPI } from '../../preload/types';
 import './App.css';
 import './CustomTitleBar.css';
 import CustomTitleBar from './CustomTitleBar';
@@ -19,7 +20,6 @@ function App() {
   const [activeTask, setActiveTask] = useState('');
   const [showLogModal, setShowLogModal] = useState(false);
   const [logRows, setLogRows] = useState<Array<Record<string, string>>>([]);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeLeftRef = useRef(timeLeft);
   const prevTabRef = useRef<null | keyof typeof TAB_CONFIG>(null);
   const sessionRef = useRef<null | {
@@ -32,44 +32,51 @@ function App() {
     timeLeftRef.current = timeLeft;
   }, [timeLeft]);
 
-  const getElapsedSeconds = (mode: keyof typeof TAB_CONFIG) =>
-    Math.max(0, TAB_CONFIG[mode].duration - timeLeftRef.current);
+  const getElapsedSeconds = useCallback(
+    (mode: keyof typeof TAB_CONFIG) => Math.max(0, TAB_CONFIG[mode].duration - timeLeftRef.current),
+    [],
+  );
 
-  const logSession = (options: { completed: boolean; interrupted: boolean; endReason: string }) => {
-    const session = sessionRef.current;
-    const mode = session?.mode ?? selectedTab;
-    const elapsedSeconds = getElapsedSeconds(mode);
-    if (!session && elapsedSeconds <= 0) return;
-    const startMs = session?.startMs ?? Date.now() - elapsedSeconds * 1000;
-    const task = (session?.task ?? activeTask) || taskInput.trim();
-    const payload = {
-      startedAt: new Date(startMs).toISOString(),
-      endedAt: new Date().toISOString(),
-      task,
-      mode,
-      elapsedSeconds,
-      completed: options.completed,
-      interrupted: options.interrupted,
-      endReason: options.endReason,
-    };
-    if (window.pomodoro?.ipcRenderer) {
-      window.pomodoro.ipcRenderer.send('log-session', payload);
-    }
-    sessionRef.current = null;
-  };
+  const logSession = useCallback(
+    (options: { completed: boolean; interrupted: boolean; endReason: string }) => {
+      const session = sessionRef.current;
+      const mode = session?.mode ?? selectedTab;
+      const elapsedSeconds = getElapsedSeconds(mode);
+      if (!session && elapsedSeconds <= 0) return;
+      const startMs = session?.startMs ?? Date.now() - elapsedSeconds * 1000;
+      const task = (session?.task ?? activeTask) || taskInput.trim();
+      const payload = {
+        startedAt: new Date(startMs).toISOString(),
+        endedAt: new Date().toISOString(),
+        task,
+        mode,
+        elapsedSeconds,
+        completed: options.completed,
+        interrupted: options.interrupted,
+        endReason: options.endReason,
+      };
+      if (window.pomodoro?.ipcRenderer) {
+        window.pomodoro.ipcRenderer.send('log-session', payload);
+      }
+      sessionRef.current = null;
+    },
+    [activeTask, getElapsedSeconds, selectedTab, taskInput],
+  );
 
   useEffect(() => {
     if (prevTabRef.current && prevTabRef.current !== selectedTab) {
       logSession({ completed: false, interrupted: true, endReason: 'tab-change' });
     }
     prevTabRef.current = selectedTab;
-    setTimeLeft(TAB_CONFIG[selectedTab].duration);
+    const nextDuration = TAB_CONFIG[selectedTab].duration;
+    setTimeLeft(nextDuration);
+    timeLeftRef.current = nextDuration;
     setIsRunning(false);
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  }, [selectedTab]);
+    (window as Window & { pomodoro?: PomodoroAPI }).pomodoro?.timerReset({
+      durationSeconds: nextDuration,
+      mode: selectedTab,
+    });
+  }, [logSession, selectedTab]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -78,35 +85,51 @@ function App() {
   };
 
   useEffect(() => {
-    if (isRunning) {
-      timerRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev > 0) {
-            return prev - 1;
-          } else {
-            clearInterval(timerRef.current!);
-            timerRef.current = null;
-            setIsRunning(false);
-            if (window.pomodoro?.timerComplete) {
-              window.pomodoro.timerComplete();
-            }
-            logSession({ completed: true, interrupted: false, endReason: 'completed' });
-            return TAB_CONFIG[selectedTab].duration;
-          }
-        });
-      }, 1000);
-    } else {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    }
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
+    const handleTick = (value: number) => {
+      timeLeftRef.current = value;
+      setTimeLeft(value);
+      if (value === 0 && isRunning) {
+        setIsRunning(false);
+        logSession({ completed: true, interrupted: false, endReason: 'completed' });
       }
     };
-  }, [isRunning, selectedTab]);
+    (window as Window & { pomodoro?: PomodoroAPI }).pomodoro?.onTimerTick(handleTick);
+    return () => {
+      (window as Window & { pomodoro?: PomodoroAPI }).pomodoro?.removeTimerTick();
+    };
+  }, [isRunning, logSession]);
+
+  useEffect(() => {
+    const syncFromMain = async () => {
+      const api = window.pomodoro as PomodoroAPI | undefined;
+      if (!api || !api.getTimerState) return;
+      const latest = await api.getTimerState();
+      if (typeof latest === 'number' && !Number.isNaN(latest)) {
+        timeLeftRef.current = latest;
+        setTimeLeft(latest);
+      }
+    };
+    syncFromMain();
+  }, []);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const api = window.pomodoro as PomodoroAPI | undefined;
+        if (!api || !api.getTimerState) return;
+        api.getTimerState().then((latest: number) => {
+          if (!Number.isNaN(latest)) {
+            timeLeftRef.current = latest;
+            setTimeLeft(latest);
+          }
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -116,7 +139,7 @@ function App() {
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
+  }, [logSession]);
 
   const handleRegisterTask = () => {
     const trimmed = taskInput.trim();
@@ -189,8 +212,10 @@ function App() {
   }, [showLogModal]);
 
   const handleStartPause = () => {
+    const pomodoroApi = window.pomodoro as PomodoroAPI | undefined;
     if (isRunning) {
       logSession({ completed: false, interrupted: true, endReason: 'paused' });
+      pomodoroApi?.timerPause();
       setIsRunning(false);
       return;
     }
@@ -200,6 +225,7 @@ function App() {
       mode: selectedTab,
       task,
     };
+    pomodoroApi?.timerStart({ durationSeconds: timeLeftRef.current, mode: selectedTab });
     setIsRunning(true);
   };
 
