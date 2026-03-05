@@ -10,6 +10,12 @@ const TAB_CONFIG = {
   'long break': { label: 'Long Break', duration: 15 * 60, color: '#4fad6a' },
 };
 
+type SessionInfo = {
+  startMs: number;
+  mode: keyof typeof TAB_CONFIG;
+  task: string;
+};
+
 function App() {
   const [selectedTab, setSelectedTab] = useState<'pomodoro' | 'short break' | 'long break'>(
     'pomodoro',
@@ -22,11 +28,15 @@ function App() {
   const [logRows, setLogRows] = useState<Array<Record<string, string>>>([]);
   const timeLeftRef = useRef(timeLeft);
   const prevTabRef = useRef<null | keyof typeof TAB_CONFIG>(null);
-  const sessionRef = useRef<null | {
-    startMs: number;
-    mode: keyof typeof TAB_CONFIG;
-    task: string;
-  }>(null);
+  const sessionRef = useRef<SessionInfo | null>(null);
+  const sessionLoggedRef = useRef(false);
+  const activeTaskRef = useRef('');
+  const taskInputRef = useRef('');
+  const selectedTabRef = useRef<'pomodoro' | 'short break' | 'long break'>(selectedTab);
+
+  activeTaskRef.current = activeTask;
+  taskInputRef.current = taskInput;
+  selectedTabRef.current = selectedTab;
 
   useEffect(() => {
     timeLeftRef.current = timeLeft;
@@ -38,17 +48,21 @@ function App() {
   );
 
   const logSession = useCallback(
-    (options: { completed: boolean; interrupted: boolean; endReason: string }) => {
-      const session = sessionRef.current;
-      const mode = session?.mode ?? selectedTab;
+    (
+      options: { completed: boolean; interrupted: boolean; endReason: string },
+      sessionOverride?: SessionInfo | null,
+    ) => {
+      if (sessionLoggedRef.current) return;
+      const session = sessionOverride ?? sessionRef.current;
+      const mode = session?.mode ?? selectedTabRef.current;
       const elapsedSeconds = getElapsedSeconds(mode);
       if (!session && elapsedSeconds <= 0) return;
       const startMs = session?.startMs ?? Date.now() - elapsedSeconds * 1000;
-      const task = (session?.task ?? activeTask) || taskInput.trim();
+      const baseTask = (session?.task ?? activeTaskRef.current) || taskInputRef.current.trim();
       const payload = {
         startedAt: new Date(startMs).toISOString(),
         endedAt: new Date().toISOString(),
-        task,
+        task: baseTask,
         mode,
         elapsedSeconds,
         completed: options.completed,
@@ -59,13 +73,15 @@ function App() {
         window.pomodoro.ipcRenderer.send('log-session', payload);
       }
       sessionRef.current = null;
+      sessionLoggedRef.current = true;
     },
-    [activeTask, getElapsedSeconds, selectedTab, taskInput],
+    [getElapsedSeconds],
   );
 
   useEffect(() => {
     if (prevTabRef.current && prevTabRef.current !== selectedTab) {
-      logSession({ completed: false, interrupted: true, endReason: 'tab-change' });
+      const sessionSnapshot = sessionRef.current;
+      logSession({ completed: false, interrupted: true, endReason: 'tab-change' }, sessionSnapshot);
     }
     prevTabRef.current = selectedTab;
     const nextDuration = TAB_CONFIG[selectedTab].duration;
@@ -220,6 +236,7 @@ function App() {
       return;
     }
     const task = activeTask || taskInput.trim();
+    sessionLoggedRef.current = false;
     sessionRef.current = {
       startMs: Date.now(),
       mode: selectedTab,
