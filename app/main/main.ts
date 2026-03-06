@@ -99,21 +99,31 @@ app.on('before-quit', () => {
   writeSessionLog(false);
 });
 
-const showTimerCompletionUi = () => {
+const showTimerCompletionUi = async () => {
   if (mainWindow) {
     mainWindow.show();
     mainWindow.focus();
   }
-  dialog.showMessageBox({
+  new Notification({
+    title: 'Pomodoro Timer',
+    body: "Time's up! Take a break.",
+  }).show();
+
+  await dialog.showMessageBox({
     type: 'info',
     title: 'Pomodoro Timer',
     message: "Time's up!",
     detail: 'Your session has finished.',
   });
-  new Notification({
-    title: 'Pomodoro Timer',
-    body: "Time's up! Take a break.",
-  }).show();
+
+  // Reset timer to default duration based on last session mode
+  const defaultDurations: Record<TimerMode, number> = {
+    pomodoro: 25 * 60,
+    'short break': 5 * 60,
+    'long break': 15 * 60,
+  };
+  timerState.timeLeft = defaultDurations[timerState.sessionMode];
+  emitTimerTick();
 };
 
 type TimerMode = 'pomodoro' | 'short break' | 'long break';
@@ -167,12 +177,12 @@ const writeSessionLog = (completed: boolean) => {
   timerState.sessionTask = '';
 };
 
-const handleTimerComplete = () => {
+const handleTimerComplete = async () => {
   stopTimer();
   timerState.timeLeft = 0;
   emitTimerTick();
   writeSessionLog(true);
-  showTimerCompletionUi();
+  await showTimerCompletionUi();
 };
 
 const startInterval = () => {
@@ -185,7 +195,7 @@ const startInterval = () => {
     timerState.timeLeft = Math.max(0, timerState.durationAtStart - elapsed);
     emitTimerTick();
     if (timerState.timeLeft <= 0) {
-      handleTimerComplete();
+      handleTimerComplete(); // not awaited, but that's fine since no code after
     }
   }, 1000);
 };
@@ -210,7 +220,7 @@ ipcMain.on(
     timerState.sessionFullDuration = duration;
     emitTimerTick();
     if (duration === 0) {
-      handleTimerComplete();
+      handleTimerComplete(); // now async, but not awaited here, which is fine
       return;
     }
     startInterval();
