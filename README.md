@@ -13,12 +13,9 @@ Pomodoro Timer is heavily inspired by [Pomofocus](https://pomofocus.io/app), and
 - **Docked window UI**: launches as a fixed-size desktop window (shows in the Dock and can be minimized like a regular app).
 - **Timer controls**: 25:00 default countdown with play/pause toggle and automatic reset when the session finishes.
 - **Session feedback**: native alert window (shown even when minimized) plus notification on completion.
-- **Renderer**: React/Vite timer UI that mirrors the provided mock (red hero background, large digits, centered button).
 - **Task input + register**: task name field with a "+" register button and active task label.
 - **Session logging**: CSV log file with task, mode, elapsed time, and interruption reason.
 - **Log viewer**: in-app 📈 button opens a modal table of recent sessions (newest first).
-- **Branding**: minimal rounded red tomato icon for app/dock.
-- **Packaging**: `electron-builder` setup emitting unsigned `.app` + `.dmg` artifacts (signing/notarization still manual).
 
 ## Tech Stack
 
@@ -53,12 +50,10 @@ Pomodoro Timer is heavily inspired by [Pomofocus](https://pomofocus.io/app), and
 
 ### Using the timer
 
-1. Click `START` to begin the 25-minute focus block.
-2. The button toggles to `PAUSE`; click it again to pause/resume.
-3. Enter a task name, click `+` to register it, and the label appears below the button.
+1. Enter a task name, click `+` to register it, and the label appears below the `START` button.
+2. Click `START` to begin the 25-minute focus, short break or long break block.
+3. The button toggles to `PAUSE`; click it again to pause/resume.
 4. Use the 📈 button to view the log table in a modal.
-5. When the timer reaches `00:00`, the window resets to `25:00`, and a native alert appears (even if minimized), plus a notification.
-6. Start again whenever you’re ready.
 
 ## Logging
 
@@ -124,56 +119,3 @@ build/
 .nvmrc        # Node version pin (22.22.0)
 .npmrc        # engine-strict to ensure Node compatibility
 .editorconfig / .eslintrc.cjs / .prettierrc  # lint & format baseline
-
-## Troubleshooting
-
-- `npm use` is not a valid command. Use `nvm use` (Node Version Manager) or install Node 22 manually (e.g., `brew install node@22` and export `PATH="/usr/local/opt/node@22/bin:$PATH"`).
-- `npm install` `EBADENGINE` errors indicate you’re on Node 16/npm 8. Switch to Node 22.22.0 and reinstall.
-- Blank renderer window in dev? Ensure `dist/main/main.js` and `dist/preload/index.js` exist (`npm run build:main && npm run build:preload`), then restart `npm run dev`.
-- Seeing Vite’s preview page instead of the Electron window? Run `npm run dev` from the repo root so Electron launches alongside Vite.
-- Notifications not showing? macOS may block the first notification—open System Settings → Notifications → Pomodoro Timer and allow alerts.
-```
-
-## Implementation Notes (Current State)
-
-### Window & UI
-
-- The application uses a **frameless Electron window** (`frame: false`, `transparent: true`) for custom top bar and modern glass effect.
-- **Resizable**: The window is resizable (`resizable: true` in BrowserWindow options), and all UI scales fluidly.
-- **main-bg**: The main content area is a single root container (class `.main-bg`) that fills the entire window (`width: 100vw; height: 100vh;`) and ensures no space or content falls outside it. The border-radius is currently set to `0px` to avoid issues with black/transparent corners caused by window shape rendering; restorations or tweaks are possible.
-- **Glass effect**: The background uses CSS `backdrop-filter: blur(18px);` and a semi-transparent fill. You can change color, alpha, and blur via `.main-bg` in App.css.
-
-### Scaling Behavior
-
-- Content (timer, button, top bar) uses `clamp()` and `vw/vh` units for responsive font sizes, widths, and layout, supporting smooth scaling.
-- Flexbox is used to align and scale elements within the main-bg, ensuring they stay centered/positioned as the window resizes.
-
-### Top Bar / Controls
-
-- The top bar (custom title bar) is rendered as part of `.main-bg`, not outside; it mimics native macOS, Windows, or Linux controls using SVG for cross-platform consistency.
-- Control buttons are wired to Electron's window APIs via IPC (see preload and main process handling for `window-control` channel).
-
-### Implementation Tradeoffs
-
-- No drop shadow is applied to the main window.
-- true glassy corners (card-like) are not visually practical with transparent custom Electron windows; using `border-radius: 0` guarantees that all edges are perfectly flush (no black corners). If you want to try bringing back rounded corners, you can simply update the border-radius in CSS, accepting the tradeoff.
-- The app is designed to be cross-platform modern and maintainable. Resizing, glass/blur, and scaling work on Mac, Windows, and Linux with minor platform style shifts (titlebar, controls).
-
-### How to continue
-
-- To change color, glass/blur strength, or border-radius: edit `.main-bg` in `app/renderer/src/App.css`.
-- To adjust scaling, refine clamp/vw/vh units in the timer/button/titlebar styles in CSS.
-- To add more features (preferences, menu, durations), follow the roadmap below.
-
-## Roadmap Snapshot
-
-- [x] Docked window with timer UI/logic
-- [x] Native notification + audible alert on completion
-- [ ] Configurable focus + break durations
-- [ ] Menu-bar status indicator / countdown
-- [ ] Native notifications for focus/break transitions (break cycles)
-- [ ] Persisted preferences/settings window
-- [ ] Windows + Linux targets in `electron-builder`
-- [ ] macOS signing + notarization automation
-
-Use this README as a living snapshot when adding features; update sections above as the app evolves.
